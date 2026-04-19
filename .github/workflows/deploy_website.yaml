@@ -84,8 +84,7 @@ jobs:
           chmod 600 $HOME/.kube/config
       - name: Verify Kubernetes connection
         run: |
-          kubectl cluster-info
-          kubectl get nodes
+          kubectl auth whoami
       - name: Deploy with Helm
         run: |
           helm upgrade --install sebastianschueler-website ./helm/sebastianschueler-website \
