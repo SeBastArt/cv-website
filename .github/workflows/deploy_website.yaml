@@ -121,7 +121,9 @@ jobs:
 
       - name: SARIF scan
         run: |
-          trivy image --format sarif --severity CRITICAL,HIGH --ignore-unfixed \
+          # Image ist arm64-only; Trivy läuft auf ubuntu-latest (amd64).
+          # Explizit `--platform linux/arm64` lädt den richtigen Manifest.
+          trivy image --platform linux/arm64 --format sarif --severity CRITICAL,HIGH --ignore-unfixed \
             --exit-code 0 --output trivy.sarif \
             "sebastart/sebastianschueler-website:${{ needs.prepare.outputs.version }}"
 
@@ -135,7 +137,7 @@ jobs:
 
       - name: SBOM
         run: |
-          trivy image --format cyclonedx --output sbom.cdx.json \
+          trivy image --platform linux/arm64 --format cyclonedx --output sbom.cdx.json \
             "sebastart/sebastianschueler-website:${{ needs.prepare.outputs.version }}"
 
       - name: Upload SBOM
@@ -147,7 +149,7 @@ jobs:
 
       - name: Gate on fixable CRITICALs
         run: |
-          trivy image --severity CRITICAL --ignore-unfixed --exit-code 1 --format table \
+          trivy image --platform linux/arm64 --severity CRITICAL --ignore-unfixed --exit-code 1 --format table \
             "sebastart/sebastianschueler-website:${{ needs.prepare.outputs.version }}"
 
   deploy:
