@@ -33,7 +33,7 @@ jobs:
       version: ${{ steps.prepare.outputs.version }}
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Prepare Version
         id: prepare
         run: |
@@ -55,7 +55,7 @@ jobs:
       DOCKER_TARGET_PLATFORM: linux/arm64
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -155,7 +155,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
       - name: Install Helm
