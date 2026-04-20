@@ -22,6 +22,10 @@ permissions:
   # F-004: OIDC gegen k3s-apiserver, User `gha:repo:SeBastArt/cv-website:ref:refs/heads/master`.
   id-token: write
 
+env:
+  # F-006 begleit-paket: pinned Trivy for reproducible scans.
+  TRIVY_VERSION: "0.70.0"
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -45,6 +49,8 @@ jobs:
   build:
     needs: prepare
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
     env:
       DOCKER_TARGET_PLATFORM: linux/arm64
     steps:
@@ -61,16 +67,91 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build and push website image
+        id: publish
+        # F-006: `:latest`-Tag entfernt (redundanter Supply-Chain-Hazard). Der
+        # `--metadata-file`-Flag gibt uns den konkreten Manifest-Digest
+        # zurück, den wir dann an Helm durchreichen.
         run: |
+          set -euo pipefail
           docker buildx build . \
-            --platform $DOCKER_TARGET_PLATFORM \
+            --platform "$DOCKER_TARGET_PLATFORM" \
             --file Dockerfile \
             --tag sebastart/sebastianschueler-website:${{ needs.prepare.outputs.version }} \
-            --tag sebastart/sebastianschueler-website:latest \
+            --metadata-file metadata.json \
             --push
+          DIGEST=$(jq -r '."containerimage.digest"' metadata.json)
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "null" ]; then
+            echo "ERROR: digest missing from buildx metadata"
+            exit 1
+          fi
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Built $DIGEST"
+
+  # F-006 begleit-paket — Trivy scan after push, before deploy.
+  scan:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Trivy
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/bin"
+          TMP="$(mktemp -d)"
+          curl -sSfL -o "$TMP/trivy.tar.gz" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          tar -xzf "$TMP/trivy.tar.gz" -C "$TMP" trivy
+          mv "$TMP/trivy" "$HOME/bin/trivy"
+          chmod +x "$HOME/bin/trivy"
+          rm -rf "$TMP"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Write Docker Hub auth
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.docker"
+          AUTH=$(printf '%s:%s' "$DH_USER" "$DH_TOKEN" | base64 -w0)
+          printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}}}' "$AUTH" > "$HOME/.docker/config.json"
+          chmod 600 "$HOME/.docker/config.json"
+
+      - name: Prime Trivy DB
+        run: trivy image --download-db-only
+
+      - name: SARIF scan
+        run: |
+          trivy image --format sarif --severity CRITICAL,HIGH --ignore-unfixed \
+            --exit-code 0 --output trivy.sarif \
+            "sebastart/sebastianschueler-website:${{ needs.prepare.outputs.version }}"
+
+      - name: Upload SARIF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sarif-${{ needs.prepare.outputs.version }}
+          path: trivy.sarif
+          retention-days: 30
+
+      - name: SBOM
+        run: |
+          trivy image --format cyclonedx --output sbom.cdx.json \
+            "sebastart/sebastianschueler-website:${{ needs.prepare.outputs.version }}"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ needs.prepare.outputs.version }}
+          path: sbom.cdx.json
+          retention-days: 90
+
+      - name: Gate on fixable CRITICALs
+        run: |
+          trivy image --severity CRITICAL --ignore-unfixed --exit-code 1 --format table \
+            "sebastart/sebastianschueler-website:${{ needs.prepare.outputs.version }}"
 
   deploy:
-    needs: [build, prepare]
+    needs: [build, scan, prepare]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
@@ -123,10 +204,17 @@ jobs:
           kubectl auth whoami
       - name: Deploy with Helm
         run: |
+          set -euo pipefail
+          DIGEST="${{ needs.build.outputs.digest }}"
+          if [ -z "$DIGEST" ]; then
+            echo "ERROR: build job did not expose a digest (F-006 gate)"
+            exit 1
+          fi
           helm upgrade --install sebastianschueler-website ./helm/sebastianschueler-website \
             --create-namespace \
             --namespace sebastianschueler \
             --set website.imageVersion=${{ needs.prepare.outputs.version }} \
+            --set website.imageDigest=$DIGEST \
             --wait \
             --timeout=300s
       - name: Verify deployment

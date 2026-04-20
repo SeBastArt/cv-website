@@ -21,7 +21,8 @@ spec:
     spec:
       containers:
         - name: website
-          image: "{{ .Values.website.image }}:{{ .Values.website.imageVersion }}"
+          image: {{ include "website.image" .Values.website | quote }}
+          imagePullPolicy: {{ include "website.imagePullPolicy" .Values.website }}
           ports:
           - containerPort: {{ .Values.website.targetPort }}
             name: http

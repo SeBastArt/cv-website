@@ -47,3 +47,17 @@ Selector labels
 app.kubernetes.io/name: {{ include "sebastianschueler-website.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+{{/*
+F-006 (AUDIT-2026-04-19) — Image helpers.
+*/}}
+{{- define "website.image" -}}
+{{- if .imageDigest -}}
+{{ .image }}@{{ .imageDigest }}
+{{- else -}}
+{{ .image }}:{{ .imageVersion }}
+{{- end -}}
+{{- end }}
+
+{{- define "website.imagePullPolicy" -}}
+{{- if .imageDigest -}}IfNotPresent{{- else -}}Always{{- end -}}
+{{- end }}

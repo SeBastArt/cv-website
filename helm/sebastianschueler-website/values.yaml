@@ -6,7 +6,9 @@ istio:
 
 website:
   image: sebastart/sebastianschueler-website
-  imageVersion: "latest"
+  imageVersion: "WILL_BE_SET_BY_CI"
+  # F-006 (AUDIT-2026-04-19): CI passes --set website.imageDigest=sha256:...
+  imageDigest: ""
   host: sebastianschueler.de
   wwwHost: www.sebastianschueler.de
   replicas: 2
