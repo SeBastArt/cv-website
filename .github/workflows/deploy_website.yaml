@@ -17,6 +17,11 @@ on:
       - 'DEPLOYMENT.md'
       - 'CLAUDE.md'
 
+permissions:
+  contents: read
+  # F-004: OIDC gegen k3s-apiserver, User `gha:repo:SeBastArt/cv-website:ref:refs/heads/master`.
+  id-token: write
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -77,11 +82,42 @@ jobs:
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           ./get_helm.sh
-      - name: Configure Kubeconfig
+      - name: Configure Kubeconfig via GitHub Actions OIDC
+        env:
+          AUDIENCE: https://kubernetes.wetrade.cluster.local
+          K8S_API_SERVER: ${{ vars.K8S_API_SERVER }}
+          K8S_CA_DATA: ${{ vars.K8S_CA_DATA }}
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+          set -euo pipefail
+          TOKEN=$(curl -sSfL             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}"             -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}"             | jq -r '.value')
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "ERROR: failed to obtain GitHub OIDC token"
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          mkdir -p "$HOME/.kube"
+          cat > "$HOME/.kube/config" <<EOF
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - name: cluster
+            cluster:
+              server: ${K8S_API_SERVER}
+              certificate-authority-data: ${K8S_CA_DATA}
+          users:
+          - name: gha-oidc
+            user:
+              token: ${TOKEN}
+          contexts:
+          - name: default
+            context:
+              cluster: cluster
+              user: gha-oidc
+          current-context: default
+          EOF
+          chmod 600 "$HOME/.kube/config"
+          kubectl auth whoami
+
       - name: Verify Kubernetes connection
         run: |
           kubectl auth whoami
