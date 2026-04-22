@@ -19,6 +19,8 @@ spec:
         version: {{ .Values.website.version | default "v1" }}
         {{ include "sebastianschueler-website.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: website
+      automountServiceAccountToken: false
       # F-003 (Ausdehnung 2026-04-21): Pod-level Seccomp + runAsNonRoot.
       # Container-SC war bereits gehaertet (runAsUser: 101, caps.drop=[ALL],
       # aPE=false). Hinzugefuegt: readOnlyRootFilesystem=true + pod-level
