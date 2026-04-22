@@ -231,13 +231,17 @@ jobs:
             echo "ERROR: build job did not expose a digest (F-006 gate)"
             exit 1
           fi
+          # --wait weggelassen: das GH-Actions-OIDC-Token läuft nach 5min aus,
+          # helm's interne Status-Polls bekommen dann 401 "Unauthorized".
+          # Stattdessen separates kubectl rollout status (frisches Token pro
+          # kubectl-Aufruf).
           helm upgrade --install sebastianschueler-website ./helm/sebastianschueler-website \
             --create-namespace \
             --namespace sebastianschueler \
             --set website.imageVersion=${{ needs.prepare.outputs.version }} \
             --set website.imageDigest=$DIGEST \
-            --wait \
-            --timeout=300s
+            --timeout=120s
+          kubectl rollout status deploy/website -n sebastianschueler --timeout=180s
       - name: Verify deployment
         run: |
           kubectl get pods -n sebastianschueler
