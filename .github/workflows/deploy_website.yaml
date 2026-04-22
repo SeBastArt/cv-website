@@ -241,7 +241,7 @@ jobs:
             --set website.imageVersion=${{ needs.prepare.outputs.version }} \
             --set website.imageDigest=$DIGEST \
             --timeout=120s
-          kubectl rollout status deploy/website -n sebastianschueler --timeout=180s
+          kubectl rollout status deploy/website -n sebastianschueler --timeout=300s
       - name: Verify deployment
         run: |
           kubectl get pods -n sebastianschueler
