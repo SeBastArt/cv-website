@@ -8,10 +8,14 @@ spec:
   secretName: sebastianschueler-cert
   # Renew certificate 30 days before expiration
   renewBefore: 720h # 30 days
-  # Domains to include in the certificate
+  # Domains to include in the certificate.
+  # Wildcard covers www + any future subdomain; apex explicit (wildcard
+  # does not match the bare domain). Requires DNS-01 (LE forbids wildcard
+  # via HTTP-01) — the letsencrypt-prod issuer uses the IONOS DNS-01 webhook
+  # since 2026-07-21.
   dnsNames:
   - sebastianschueler.de
-  - www.sebastianschueler.de
+  - "*.sebastianschueler.de"
   # Reference to the ClusterIssuer
   issuerRef:
     name: letsencrypt-prod
