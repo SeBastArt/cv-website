@@ -79,8 +79,16 @@ jobs:
         # zurück, den wir dann an Helm durchreichen.
         run: |
           set -euo pipefail
+          # --provenance=false/--sbom=false: plain single-arch manifest statt
+          # OCI-Index, wie in github-actions-runner-setup/build-image.yaml.
+          # Mit Provenance-Attestation wird selbst ein arm64-only-Build ein
+          # Index; Kyverno 1.19.1 (ImageValidatingPolicy) loest Indizes auf
+          # linux/amd64 auf und lehnt das Image dann ab (kyverno#16940). Die
+          # SBOM erzeugt der scan-Job separat per Trivy.
           docker buildx build . \
             --platform "$DOCKER_TARGET_PLATFORM" \
+            --provenance=false \
+            --sbom=false \
             --file Dockerfile \
             --tag sebastart/sebastianschueler-website:${{ needs.prepare.outputs.version }} \
             --metadata-file metadata.json \
